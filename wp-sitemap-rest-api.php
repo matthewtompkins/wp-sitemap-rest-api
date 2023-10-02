@@ -102,12 +102,14 @@ function wsra_generate_posts_api()
         //use canonical override if it exists
 
         $canonical_override = get_post_meta(get_the_ID(), '_yoast_wpseo_canonical');
+        $is_overriden = (count($canonical_override) > 0 && $canonical_override[0]);
 
-        $uri = (count($canonical_override) > 0 && $canonical_override[0]) ? $canonical_override[0] :  str_replace(clean_home(), '', get_permalink());
+        $uri = $is_overriden ? $canonical_override[0] :  str_replace(clean_home(), '', get_permalink());
 
         $tempArray = [
             'url' => $uri,
             'post_modified_date' => get_the_modified_date(),
+            'is_overriden' => $is_overriden
         ];
         array_push($postUrls, $tempArray);
     }
