@@ -28,6 +28,7 @@ function wsra_get_user_inputs()
         'posts_per_page' => $perPage,
         'post_type' => strval($postType ? $postType : 'post'),
         'paged' => $paged,
+        'suppress_filters' => true
     );
 
     return [$args, $postArgs, $taxonomy];
@@ -40,7 +41,7 @@ function wsra_generate_author_api()
     $authors =  get_users($args);
     foreach ($authors as $author) {
         $fullUrl = esc_url(get_author_posts_url($author->ID));
-        $url = str_replace(home_url(), '', $fullUrl);
+        $url = str_replace(clean_home(), '', $fullUrl);
         $tempArray = [
             'url' => $url,
         ];
@@ -54,8 +55,34 @@ function wsra_generate_taxonomy_api()
     $taxonomy_urls = array();
     $taxonomys = $taxonomy == 'tag' ? get_tags($args) : get_categories($args);
     foreach ($taxonomys as $taxonomy) {
+
+        if ($taxonomy !== 'tag') {
+
+            if (has_filter('wpml_active_languages')) {
+
+                $langs = apply_filters('wpml_active_languages', null);
+                if (!empty($langs)) {
+                    foreach ($langs as $lang) {
+                        if ($lang["code"] !== "en") {
+                            $trid = apply_filters('wpml_object_id', $taxonomy->term_id, 'category', false, $lang['code']);
+                            if ($trid) {
+                                $fullUrl = esc_url(get_category_link($trid));
+                                if ($fullUrl) {
+                                    $url = str_replace(clean_home(), '', $fullUrl);
+                                    $tempArray = [
+                                        'url' => $url
+                                    ];
+                                    array_push($taxonomy_urls, $tempArray);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         $fullUrl = esc_url(get_category_link($taxonomy->term_id));
-        $url = str_replace(home_url(), '', $fullUrl);
+        $url = str_replace(clean_home(), '', $fullUrl);
         $tempArray = [
             'url' => $url,
         ];
@@ -71,7 +98,13 @@ function wsra_generate_posts_api()
 
     while ($query->have_posts()) {
         $query->the_post();
-        $uri = str_replace(home_url(), '', get_permalink());
+
+        //use canonical override if it exists
+
+        $canonical_override = get_post_meta(get_the_ID(), '_yoast_wpseo_canonical');
+
+        $uri = (count($canonical_override) > 0 && $canonical_override[0]) ? $canonical_override[0] :  str_replace(clean_home(), '', get_permalink());
+
         $tempArray = [
             'url' => $uri,
             'post_modified_date' => get_the_modified_date(),
@@ -103,6 +136,15 @@ function wsra_generate_totalpages_api()
         $tempValueHolder[$postType] = (int)wp_count_posts($postType)->publish;
     }
     return array_merge($defaultArray, $tempValueHolder);
+}
+
+function clean_home()
+{
+    $home = untrailingslashit(home_url());
+    if (str_ends_with($home, '/en')) {
+        $home = str_split($home, strlen($home) - 3)[0];
+    }
+    return $home;
 }
 
 add_action('rest_api_init', function () {
